@@ -10,24 +10,24 @@ using namespace cv;
 
 struct winInfo {Mat img; string name; vector<Point2f> pointList;};
 
-class Pcv2{
+class PMakerBG{
 
 	public:
 		// constructor
-		Pcv2(void){};
+		PMakerBG(void){};
 		// destructor
-		~Pcv2(void){};
+		~PMakerBG(void){};
 		
 		// processing routine
-		void run(string, string, string);
+		void run(string, string, string, bool automatic);
 		// processing routine for more then 3 pictures
-		void run2(string);
+		void run2(string, bool automatic);
 		// testing routine
 		void test(void);
 
 	private:
 		// given functions
-		int getPoints(struct winInfo&, struct winInfo&, Mat&, Mat&);
+		int getPoints(struct winInfo&, struct winInfo&, Mat&, Mat&, bool automatic);
 		Mat stitch(Mat&, Mat&, Mat&);
 		// functions to be implemented
 		// --> edit ONLY these functions!

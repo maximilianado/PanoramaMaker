@@ -1,4 +1,5 @@
-#include "Pcv2.h"
+#include "PMakerBG.h"
+#include "opencv2/nonfree/features2d.hpp"
 
 String POINT = "point";
 String LINE = "line";
@@ -9,8 +10,7 @@ base		first set of points x'
 attach		second set of points x
 return		homography H, so that x' = Hx
 */
-Mat Pcv2::homography2D(Mat& base, Mat& attach){
-	// TO DO !!!
+Mat PMakerBG::homography2D(Mat& base, Mat& attach){
 	//condition -> to get T and T'
 	Mat T = getCondition2D(base);
 	Mat T2 = getCondition2D(attach);
@@ -29,9 +29,9 @@ Mat Pcv2::homography2D(Mat& base, Mat& attach){
 // solve homogeneous equation system by usage of SVD
 /*
 A		the design matrix
-return	solution of the homogeneous equation system
+return		solution of the homogeneous equation system
 */
-Mat Pcv2::solve_dlt(Mat& A){
+Mat PMakerBG::solve_dlt(Mat& A){
 	// TO DO !!!
 	Mat Aquat = Mat::zeros(A.cols, A.cols, CV_32FC1);
 	if (A.rows < A.cols) {
@@ -64,7 +64,7 @@ T_base		conditioning matrix T' of first set of points x'
 T_attach	conditioning matrix T of second set of points x
 H			conditioned homography that has to be un-conditioned (in-place)
 */
-void Pcv2::decondition(Mat& T_base, Mat& T_attach, Mat& H){
+void PMakerBG::decondition(Mat& T_base, Mat& T_attach, Mat& H){
   	// TO DO !!!
 	H = T_base.inv()*H*T_attach;
 }
@@ -91,7 +91,7 @@ base	first set of points x' --> x' = H * x
 attach	second set of points x --> x' = H * x
 return	the design matrix to be computed
 */
-Mat Pcv2::getDesignMatrix_homography2D(Mat& base, Mat& attach){
+Mat PMakerBG::getDesignMatrix_homography2D(Mat& base, Mat& attach){
 	// TO DO !!!
 	Mat designMatrix = Mat::zeros((base.cols*2),9, CV_32FC1);//for random number of points
 	for (int i=0; i<base.cols; i++) {
@@ -109,7 +109,7 @@ geomObj		matrix with input objects (one per column)
 type		the type of the geometric object (for now: only point and line)
 return		transformed objects (one per column)
 */
-Mat Pcv2::applyH(Mat& geomObj, Mat& H, string type){
+Mat PMakerBG::applyH(Mat& geomObj, Mat& H, string type){
 
   	// if object is a point
   	if (type.compare(POINT) == 0){
@@ -133,7 +133,7 @@ Mat Pcv2::applyH(Mat& geomObj, Mat& H, string type){
 p		the points as matrix
 return	the condition matrix (already allocated)
 */
-Mat Pcv2::getCondition2D(Mat& p){
+Mat PMakerBG::getCondition2D(Mat& p){
 	// TO DO !!!
 	float tx = 0;
 	float ty = 0;
@@ -172,7 +172,7 @@ attach		the image to be attached
 H		the homography to warp the second image
 panorama	the resulting image
 */
-Mat Pcv2::stitch(Mat& base, Mat& attach, Mat& H){
+Mat PMakerBG::stitch(Mat& base, Mat& attach, Mat& H){
 
     // compute corners of warped image
     Mat corners(1, 4, CV_32FC2);
@@ -247,43 +247,126 @@ attach		structure containing image that has to be attached
 p_base		points within the base image (to be defined by this method)
 p_attach	points within the second image (to be defined by this method)
 */
-int Pcv2::getPoints(struct winInfo& base, struct winInfo& attach, Mat& p_base, Mat& p_attach){
- 
-    cout << endl;
-    cout << "Please select at least four points by clicking at the corresponding image positions:" << endl;
-    cout << "Firstly click at the point that shall be transformed (within the image to be attached), followed by a click on the corresponding point within the base image" << endl;
-    cout << "Continue until you have collected as many point pairs as you wish" << endl;
-    cout << "Stop the point selection by pressing any key" << endl << endl;
-  
-    // show input images and install mouse callback
-    namedWindow( base.name.c_str(), 0 );
-    imshow( base.name.c_str(), base.img );
-    base.pointList.clear();
-    setMouseCallback(base.name.c_str(), getPointsCB, (void*) &base);
-    namedWindow( attach.name.c_str(), 0 );
-    imshow( attach.name.c_str(), attach.img );
-    attach.pointList.clear();
-    setMouseCallback(attach.name.c_str(), getPointsCB, (void*) &attach);
-    // wait until any key was pressed
-    waitKey(0);
-    
-    destroyWindow( base.name.c_str() );
-    destroyWindow( attach.name.c_str() );
+int PMakerBG::getPoints(struct winInfo& base, struct winInfo& attach, Mat& p_base, Mat& p_attach, bool automatic){
+ 	int numOfPoints = 0;
+	if (automatic) {
+		Mat baseIm = base.img;
+		Mat attachIm = attach.img;
 
-    // allocate memory for point-lists (represented as matrix)
-    int numOfPoints = base.pointList.size();
-    p_base = Mat(3, numOfPoints, CV_32FC1);
-    p_attach = Mat(3, numOfPoints, CV_32FC1);
-    // read points from global variable, transform them into homogeneous coordinates
-    for(int p = 0; p<numOfPoints; p++){
-		p_attach.at<float>(0, p) = attach.pointList.at(p).x;
-		p_attach.at<float>(1, p) = attach.pointList.at(p).y;
-		p_attach.at<float>(2, p) = 1;
-		p_base.at<float>(0, p) = base.pointList.at(p).x;
-		p_base.at<float>(1, p) = base.pointList.at(p).y;
-		p_base.at<float>(2, p) = 1;
-    }
-    return numOfPoints;
+		//define detector, extrector and matcher
+		//cv::Ptr<cv::FeatureDetector> detector= new cv::SurfFeatureDetector();
+		//cv::Ptr<cv::DescriptorExtractor> extractor= new cv::SurfDescriptorExtractor();
+		//cv::BruteForceMatcher<cv::L2<float> > matcher = new cv::L2();
+		cv::BFMatcher matcher( cv::NORM_L2, false );
+     
+		//find points
+		//std::vector<cv::KeyPoint>& keypoints1, keypoints2;
+		//detector->detect(baseIm,keypoints1);
+		//detector->detect(attachIm,keypoints2);
+
+		//extract descriptors
+		//cv::Mat descriptors1, descriptors2;
+		//extractor->compute(baseIm,keypoints1,descriptors1);
+		//extractor->compute(attachIm,keypoints2,descriptors2);
+
+		int minHessian = 400;
+		cv::SURF surf( minHessian );
+
+		std::vector<cv::KeyPoint> keypoints1, keypoints2;
+		cv::Mat descriptors1, descriptors2;
+
+		surf( baseIm, cv::Mat(), keypoints1, descriptors1, false );
+		surf( attachIm, cv::Mat(), keypoints2, descriptors2, false );
+
+
+		//matching
+		std::vector< cv::DMatch > matches;
+		matcher.match( descriptors1, descriptors2, matches );
+
+		//-- Draw matches
+		cv::Mat img_matches;
+		cv::drawMatches( baseIm, keypoints1, attachIm, keypoints2, matches, img_matches );
+
+		//-- Show detected matches
+		imshow("Matches", img_matches );		
+
+		cv::waitKey(0);
+		// from image 1 to image 2
+		// based on k nearest neighbours (with k=2)
+		//std::vector<std::vector<cv::DMatch> > matches1;
+		//matcher.knnMatch(descriptors1,descriptors2, 
+		//	matches1, // vector of matches (up to 2 per entry) 
+		//	2);		  // return 2 nearest neighbours
+
+		// from image 2 to image 1
+		// based on k nearest neighbours (with k=2)
+		//std::vector<std::vector<cv::DMatch> > matches2;
+		//matcher.knnMatch(descriptors2,descriptors1, 
+		//	matches2, // vector of matches (up to 2 per entry) 
+		//	2);		  // return 2 nearest neighbours
+
+		//std::cout << "Number of matched points 1->2: " << matches1.size() << std::endl;
+		//std::cout << "Number of matched points 2->1: " << matches2.size() << std::endl;
+
+		//Remove matches for which NN ratio is > than threshold
+		// clean image 1 -> image 2 matches
+		//int removed= ratioTest(matches1);
+		//std::cout << "Number of matched points 1->2 (ratio test) : " << matches1.size()-removed << std::endl;
+		// clean image 2 -> image 1 matches
+		//removed= ratioTest(matches2);
+		//std::cout << "Number of matched points 1->2 (ratio test) : " << matches2.size()-removed << std::endl;
+
+		//Remove non-symmetrical matches
+		//std::vector<cv::DMatch> symMatches;
+		//symmetryTest(matches1,matches2,symMatches);
+
+		//std::cout << "Number of matched points (symmetry test): " << symMatches.size() << std::endl;
+
+		// 5. Validate matches using RANSAC
+		//cv::Mat fundemental= ransacTest(symMatches, keypoints1, keypoints2, matches); // it is the fundamental matrix!!
+
+		//p_base = keypoints1;
+		//p_attach = keypoints2;
+		//TODO write points in matrix
+		
+		numOfPoints = p_base.size().width;
+	} else {
+		cout << endl;
+		cout << "Please select at least four points by clicking at the corresponding image positions:" << endl;
+		cout << "Firstly click at the point that shall be transformed (within the image to be attached), followed by a click on the corresponding point within the base image" << endl;
+		cout << "Continue until you have collected as many point pairs as you wish" << endl;
+		cout << "Stop the point selection by pressing any key" << endl << endl;
+
+		// show input images and install mouse callback
+		namedWindow( base.name.c_str(), 0 );
+		imshow( base.name.c_str(), base.img );
+		base.pointList.clear();
+		setMouseCallback(base.name.c_str(), getPointsCB, (void*) &base);
+		namedWindow( attach.name.c_str(), 0 );
+		imshow( attach.name.c_str(), attach.img );
+		attach.pointList.clear();
+		setMouseCallback(attach.name.c_str(), getPointsCB, (void*) &attach);
+		// wait until any key was pressed
+		waitKey(0);
+
+		destroyWindow( base.name.c_str() );
+		destroyWindow( attach.name.c_str() );
+
+		// allocate memory for point-lists (represented as matrix)
+		numOfPoints = base.pointList.size();
+		p_base = Mat(3, numOfPoints, CV_32FC1);
+		p_attach = Mat(3, numOfPoints, CV_32FC1);
+		// read points from global variable, transform them into homogeneous coordinates
+		for(int p = 0; p<numOfPoints; p++){
+			p_attach.at<float>(0, p) = attach.pointList.at(p).x;
+			p_attach.at<float>(1, p) = attach.pointList.at(p).y;
+			p_attach.at<float>(2, p) = 1;
+			p_base.at<float>(0, p) = base.pointList.at(p).x;
+			p_base.at<float>(1, p) = base.pointList.at(p).y;
+			p_base.at<float>(2, p) = 1;
+		}
+	}
+    	return numOfPoints;
 
 }
 
@@ -291,7 +374,7 @@ int Pcv2::getPoints(struct winInfo& base, struct winInfo& attach, Mat& p_base, M
 /*
 fname	path to input image
 */
-void Pcv2::run(string fnameBase, string fnameLeft, string fnameRight){
+void PMakerBG::run(string fnameBase, string fnameLeft, string fnameRight, bool automatic){
 
     // titles of some windows
     string winName1 = string("Base image");
@@ -323,7 +406,7 @@ void Pcv2::run(string fnameBase, string fnameLeft, string fnameRight){
     // get corresponding points within the two image
     // start with one point within the attached image, then click on corresponding point in base image
     Mat p_basis, p_attach;
-    int numberOfPointPairs = getPoints(base, attach, p_basis, p_attach);
+    int numberOfPointPairs = getPoints(base, attach, p_basis, p_attach, automatic);
     
     // just some putput
     cout << "Number of defined point pairs: " << numberOfPointPairs << endl;
@@ -360,7 +443,7 @@ void Pcv2::run(string fnameBase, string fnameLeft, string fnameRight){
     
     // get corresponding points within the two image
     // start with one point within the attached image, then click on corresponding point in base image
-    numberOfPointPairs = getPoints(base, attach, p_basis, p_attach);
+    numberOfPointPairs = getPoints(base, attach, p_basis, p_attach, automatic);
     
     // just some putput
     cout << "Number of defined point pairs: " << numberOfPointPairs << endl;
@@ -401,7 +484,7 @@ const char kPathSeparator =
 /*
 fname	path to input image
 */
-void Pcv2::run2(string directoryName){
+void PMakerBG::run2(string directoryName, bool automatic){
     string fname = "";
     string fnameLeft = "";
     string fnameRight = "";
@@ -470,7 +553,7 @@ cout << "bis hier hin komme ich " << index << endl;
     	// get corresponding points within the two image
     	// start with one point within the attached image, then click on corresponding point in base image
     	Mat p_basis, p_attach;
-    	int numberOfPointPairs = getPoints(base, attach, p_basis, p_attach);
+    	int numberOfPointPairs = getPoints(base, attach, p_basis, p_attach, automatic);
     
     	// just some putput
     	cout << "Number of defined point pairs: " << numberOfPointPairs << endl;
@@ -500,7 +583,7 @@ cout << "bis hier hin komme ich " << index << endl;
 
 // function calls processing functions
 // output is tested on "correctness" 
-void Pcv2::test(void){
+void PMakerBG::test(void){
 	test_homography2D();
 	test_getCondition2D();
 	test_getDesignMatrix_homography2D();
@@ -508,7 +591,7 @@ void Pcv2::test(void){
 	test_decondition();
 }
 
-void Pcv2::test_getCondition2D(void){
+void PMakerBG::test_getCondition2D(void){
 	Mat p = (Mat_<float>(3,4) << 93, 729, 703, 152, 617, 742, 1233, 1103, 1, 1, 1, 1);
 	Mat Ttrue = (Mat_<float>(3,3) << 1./296.75, 0, -419.25/296.75, 0, 1./244.25, -923.75/244.25, 0, 0, 1);
 	
@@ -528,7 +611,7 @@ void Pcv2::test_getCondition2D(void){
 	}
 }
 
-void Pcv2::test_getDesignMatrix_homography2D(void){
+void PMakerBG::test_getDesignMatrix_homography2D(void){
 	
 	Mat p1 = (Mat_<float>(3,4) << -1, 1, 1, -1, -1, -1, 1, 1,  1, 1, 1, 1);
 	Mat p2 = (Mat_<float>(3,4) << -1.0994103, 1.0438079, 0.9561919, -0.90058976,  -1.2558856, -0.74411488, 1.2661204, 0.73387909, 1, 1, 1, 1);
@@ -554,7 +637,7 @@ void Pcv2::test_getDesignMatrix_homography2D(void){
 		
 }
 
-void Pcv2::test_solve_dlt(void){
+void PMakerBG::test_solve_dlt(void){
 	Mat A = (Mat_<float>(8,9) << 1.0994103, 1.2558856, -1, 0, 0, 0, 1.0994103, 1.2558856, -1, 0, 0, 0, 1.0994103, 1.2558856, -1, 1.0994103, 1.2558856, -1, -1.0438079, 0.74411488, -1, 0, 0, 0, 1.0438079, -0.74411488, 1, 0, 0, 0, -1.0438079, 0.74411488, -1, -1.0438079, 0.74411488, -1, -0.9561919, -1.2661204, -1, 0, 0, 0, 0.9561919, 1.2661204, 1, 0, 0, 0, -0.9561919, -1.2661204, -1, 0.9561919, 1.2661204, 1, 0.90058976, -0.73387909, -1, 0, 0, 0, 0.90058976, -0.73387909, -1, 0, 0, 0, 0.90058976, -0.73387909, -1, -0.90058976, 0.73387909, 1);
 	Mat Hest = solve_dlt(A);
 	if ( (Hest.rows != 3) || (Hest.cols != 3) || (Hest.channels() != 1) ){
@@ -574,7 +657,7 @@ void Pcv2::test_solve_dlt(void){
 	}
 }
 
-void Pcv2::test_decondition(void){
+void PMakerBG::test_decondition(void){
 	
 	Mat H = (Mat_<float>(3,3) << 0.57111752, -0.017852778, 0.013727478, -0.15091757, 0.57065326, -0.04098846, 0.024604173, -0.041672569, 0.56645769);
 	Mat T1 = (Mat_<float>(3,3) << 1./319.5, 0, -1, 0, 1./319.5, -1, 0, 0, 1);
@@ -596,7 +679,7 @@ void Pcv2::test_decondition(void){
 	}
 }
 
-void Pcv2::test_homography2D(void){
+void PMakerBG::test_homography2D(void){
 
 	Mat p1 = (Mat_<float>(3,4) << 0, 639, 639, 0, 0, 0, 639, 639, 1, 1, 1, 1);	
 	Mat p2 = (Mat_<float>(3,4) << 93, 729, 703, 152, 617, 742, 1233, 1103, 1, 1, 1, 1);
